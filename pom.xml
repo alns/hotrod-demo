@@ -25,10 +25,8 @@
 	<properties>
 		<main.class>com.redhat.middleware.jdg.Main</main.class>
 		<!-- This is the JDG version, please make sure JDG repository is setup (see README.md) -->
-        <infinispan.version>5.1.5.FINAL</infinispan.version>
-        <!-- For JDG version, add -redhat-1
-        	<infinispan.version>5.1.5.FINAL-redhat-1</infinispan.version>
-        -->
+        <infinispan.version>5.1.7.Final-redhat-1</infinispan.version>
+      
 	</properties>
 	<dependencies>
 		<dependency>
