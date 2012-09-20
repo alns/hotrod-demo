@@ -26,10 +26,8 @@ package com.redhat.middleware.jdg;
  * 
  * @author <a href="mailto:rtsang@redhat.com">Ray Tsang</a>
  *
- * @param <K> key type
- * @param <V> value type
  */
-public interface HotRodDemoClient<K, V> {
+public interface HotRodDemoClient extends Runnable {
 	public void startSync();
-	public void startAsync();
+	public Thread startAsync();
 }

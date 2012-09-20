@@ -23,77 +23,31 @@
 
 package com.redhat.middleware.jdg;
 
-import org.infinispan.api.BasicCache;
-import org.infinispan.api.BasicCacheContainer;
+import org.infinispan.client.hotrod.RemoteCache;
 
 /**
  * A simple hotrod client that populates the cache sequentially by counting
- * from 0 to <code>entries - 1</code>.
+ * from 0 until the launcher quits or a fatal error occurs (e.g. OOM).
  * 
  * @author <a href="mailto:rtsang@redhat.com">Ray Tsang</a>
  *
  */
-public class CountDemoClient extends DelayableDemoClient<Integer, Object> {
-	
-	private static final int DEFAULT_MAX_ENTRIES = 1000;
-	private static final String DEFAULT_PAYLOAD = "Some data";
-	
-	/**
-	 * Max number of entries to generate.
-	 */
-	private int maxEntries = DEFAULT_MAX_ENTRIES;
-	
-	/**
-	 * Payload you want to put for each entry (e.g., to test w/ different payload sizes).
-	 */
-	private Object payload = DEFAULT_PAYLOAD;
+public class CountDemoClient extends AbstractHotRodDemoClient<Long, Object> {
 
-	public CountDemoClient(BasicCache<Integer, Object> cache) {
-		super(cache);
+	public CountDemoClient(RemoteCache<Long, Object> cache) {
+		super(cache, 50 /*delay MS between puts */, true);
 	}
 
-	public CountDemoClient(BasicCacheContainer container, String cacheName) {
-		super(container, cacheName);
+	public CountDemoClient(RemoteCache<Long, Object> cache, long delay, boolean clearOnExit) {
+		super(cache, delay, clearOnExit);
 	}
 
-	@Override
-	public void runSync() {
-		for (int i = 0; i < maxEntries; i++) {
-			getCache().put(i, payload);
-			delay();
-		}
-	}
-	
-	@Override
-	public void clear() {
-		for (int i = 0; i < maxEntries; i++) {
-			getCache().remove(i);
-			delay();
-		}
-		for (int i = 0; i < maxEntries; i++) {
-			if (getCache().containsKey(i)) {
-				System.out.println("Found i = " + i + ".  This is bad!");
-			}
+	public void run() {
+		long i=0;
+		while (true) {
+			getCache().put(i, "Value: " + new Long(i++));
+			super.stall();
 		}
 	}
 
-	public int getMaxEntries() {
-		return maxEntries;
-	}
-
-	public void setMaxEntries(int maxEntries) {
-		this.maxEntries = maxEntries;
-	}
-
-	public Object getPayload() {
-		return payload;
-	}
-
-	public void setPayload(Object payload) {
-		this.payload = payload;
-	}
-
-	public void startAsync() {
-		throw new UnsupportedOperationException();
-	}
 }

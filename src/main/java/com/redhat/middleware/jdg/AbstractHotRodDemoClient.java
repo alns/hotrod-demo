@@ -23,7 +23,6 @@
 package com.redhat.middleware.jdg;
 
 import org.infinispan.api.BasicCache;
-import org.infinispan.api.BasicCacheContainer;
 
 /**
  * 
@@ -32,58 +31,68 @@ import org.infinispan.api.BasicCacheContainer;
  * @param <K> key type
  * @param <V> value type
  */
-public abstract class AbstractHotRodDemoClient<K, V> implements HotRodDemoClient<K, V> {
-	public static final boolean DEFAULT_CLEAR_ON_FINISH = true;
-	
-	private final BasicCache<K, V> cache;
-	
-	/**
-	 * If set to true, cache will be cleared once runSync() completes
-	 */
-	private boolean clearOnFinish = DEFAULT_CLEAR_ON_FINISH;
-	
-	
-	@SuppressWarnings("unchecked")
-	public AbstractHotRodDemoClient(BasicCacheContainer container, String cacheName) {
-		this((BasicCache<K, V>) container.getCache(cacheName));
-	}
+public abstract class AbstractHotRodDemoClient<Long, V> implements HotRodDemoClient {
 
-	public AbstractHotRodDemoClient(BasicCache<K, V> cache) {
+	private interface Delayer {
+		public void stall();
+	};
+	
+	private final BasicCache<Long, V> cache;
+	private final Delayer delayer;
+	
+	public AbstractHotRodDemoClient(BasicCache<Long, V> cache) {
+		this(cache, 0, true);
+	}
+	
+	public AbstractHotRodDemoClient(BasicCache<Long, V> cache, final long delay, boolean clearOnFinish) {
 		super();
+
 		this.cache = cache;
+
+		
+		if (delay > 0) {
+			this.delayer = new Delayer() {
+				public void stall() { return; }
+			};
+		}
+		else {
+			this.delayer = new Delayer() {
+				public void stall() {
+					try {
+						Thread.sleep(delay);
+					} catch (InterruptedException e) {
+					};
+				}
+			};
+		}
+
+		if (!clearOnFinish) { return; }
+		
+		Runtime.getRuntime().addShutdownHook(new Thread() {
+			public void run() {
+				System.out.println("Clearing Cache");
+				getCache().clear();
+			}
+		});
+
+
 	}
 	
 	public void startSync() {
-		runSync();
-		
-		if (clearOnFinish) {
-			clear();
-		}
+		this.run();
 	}
 	
-	public void startAsync() {
-		// TODO start a thread
+	public Thread startAsync() {
+		Thread t = new Thread(this);
+		t.start();
+		return t;	
 	}
 	
-	/**
-	 * Run the demo synchronously
-	 */
-	public abstract void runSync();
-	
-	/**
-	 * Clear the cache.  This will be called when clearOnFinish is set to true.
-	 */
-	public abstract void clear();
-
-	public BasicCache<K, V> getCache() {
+	public BasicCache<Long, V> getCache() {
 		return cache;
-	}
-
-	public boolean isClearOnFinish() {
-		return clearOnFinish;
-	}
-
-	public void setClearOnFinish(boolean clearOnFinish) {
-		this.clearOnFinish = clearOnFinish;
+	}	
+	
+	protected void stall() {
+		this.delayer.stall();
 	}
 }

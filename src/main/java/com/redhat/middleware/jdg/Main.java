@@ -24,6 +24,7 @@
 package com.redhat.middleware.jdg;
 
 import org.infinispan.client.hotrod.RemoteCacheManager;
+import org.infinispan.client.hotrod.RemoteCache;
 
 /**
  * Main class.  Configure accordingly!  Pay attention to
@@ -35,31 +36,27 @@ public class Main {
 	/**
 	 * Initial hotrod server list
 	 */
-	private static final String INITIAL_LIST = "127.0.0.1";
-	
+	private static String LOCALHOST = "127.0.0.1";
+	private static String SERVER_IP = System.getProperty("hotrodServer", LOCALHOST);
 	/**
 	 * Name of the cache to use for demo
 	 */
-	private static final String CACHE_NAME = "___defaultcache";
-
+	private static final String DEFAULT_CACHE_NAME = "___defaultcache";
+	private static String CACHE_NAME = System.getProperty("cacheName", DEFAULT_CACHE_NAME);
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		RemoteCacheManager cm = new RemoteCacheManager(INITIAL_LIST);
+		RemoteCacheManager cm = new RemoteCacheManager(SERVER_IP);
 		
-		CountDemoClient countDemo = new CountDemoClient(cm, CACHE_NAME);
-		// optional parameters
-		// countDemo.setMaxEntries(1000);
-		// countDemo.setPayload("some example payload, it can be serializable object");
+		RemoteCache<Long, Object> cache = cm.getCache(CACHE_NAME);
+		
+		CountDemoClient countDemo = new CountDemoClient(cache);
 		countDemo.startSync();
 		
-		// TODO: replace CONSUMER KEY and CONSUMER SECRET!!
-		TwitterDemoClient twitterDemo = new TwitterDemoClient(cm, CACHE_NAME, "CONSUMER KEY", "CONSUMER SECRET");
-		// optional parameters
-		// twitterDemo.setMaxEntries(1000);
-		
-		twitterDemo.startAsync();
-		
+		//RemoteCache<Long, Status> cache = cm.getCache(CACHE_NAME);
+		//TwitterDemoClient twitterDemo = new TwitterDemoClient( (RemoteCache<Long, Status>)cache);//, "CONSUMER KEY", "CONSUMER SECRET");
+		//Thread t = twitterDemo.startAsync();
+		//t.join();
 	}
 }

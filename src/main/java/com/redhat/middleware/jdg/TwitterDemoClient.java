@@ -30,7 +30,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.infinispan.api.BasicCache;
-import org.infinispan.api.BasicCacheContainer;
 
 import twitter4j.Status;
 import twitter4j.StatusDeletionNotice;
@@ -50,152 +49,66 @@ import twitter4j.conf.ConfigurationBuilder;
  * @author <a href="mailto:rtsang@redhat.com">Ray Tsang</a>
  *
  */
-public class TwitterDemoClient extends DelayableDemoClient<Long, Status> {
-	private static final int DEFAULT_MAX_ENTRIES = 1000;
+public class TwitterDemoClient extends AbstractHotRodDemoClient<Long, Status> {
 	
 	private Logger logger = Logger.getLogger(TwitterDemoClient.class.getName());
 
 	/**
 	 * Twitter API Consumer Key, you should create your own.
 	 */
-	private final String consumerKey;
-	
+	private final String consumerKey = System.getProperty("twitConsumerKey");
+
 	/**
 	 * Twitter API Consumer Secret, you should create your own.
 	 */
-	private final String consumerSecret;
+	private final String consumerSecret = System.getProperty("twitConsumerSecret");
+	
 	private String accessToken;
 	private String accessTokenSecret;
-	private int maxEntries = DEFAULT_MAX_ENTRIES;
 
-	public TwitterDemoClient(BasicCache<Long, Status> cache,
-			String consumerKey, String consumerSecret) {
+	public TwitterDemoClient(BasicCache<Long, Status> cache) {
 		super(cache);
-		this.consumerKey = consumerKey;
-		this.consumerSecret = consumerSecret;
-	}
-
-	public TwitterDemoClient(BasicCacheContainer container, String cacheName,
-			String consumerKey, String consumerSecret) {
-		super(container, cacheName);
-		this.consumerKey = consumerKey;
-		this.consumerSecret = consumerSecret;
 	}
 	
-	@Override
-	public void startSync() {
-		throw new UnsupportedOperationException();
-	}
-
-	@Override
-	public void runSync() {
-		throw new UnsupportedOperationException();
-	}
-	
-	@Override
-	public void clear() {
-		getCache().clear();
-	}
-
-	protected void authorize() throws TwitterException, IOException {
+	protected void authorize() throws RuntimeException {
 		Twitter twitter = new TwitterFactory().getInstance();
-		twitter.setOAuthConsumer(consumerKey, consumerSecret);
-		RequestToken requestToken = twitter.getOAuthRequestToken();
-		AccessToken accessToken = null;
-		BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-		while (null == accessToken) {
-			System.out
-					.println("Open the following URL and grant access to your account:");
-			System.out.println(requestToken.getAuthorizationURL());
-			System.out
-					.print("Enter the PIN(if aviailable) or just hit enter.[PIN]:");
-			String pin = br.readLine();
-			try {
-				if (pin.length() > 0) {
-					accessToken = twitter
-							.getOAuthAccessToken(requestToken, pin);
-				} else {
-					accessToken = twitter.getOAuthAccessToken();
+		if (consumerKey == null || consumerSecret == null) 
+			throw new RuntimeException("Missing consumer secret and/or key");
+		
+		try {
+			twitter.setOAuthConsumer(consumerKey, consumerSecret);
+			RequestToken requestToken = twitter.getOAuthRequestToken();
+			
+			AccessToken accessToken = null;
+			BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+			while (null == accessToken) {
+				System.out.println("Open the following URL and grant access to the account:");
+				System.out.println(requestToken.getAuthorizationURL());
+				System.out.print("Enter PIN(if aviailable) or just enter:");
+				
+				try {
+					String pin = br.readLine();
+	
+					if (pin.length() > 0) {
+						accessToken = twitter.getOAuthAccessToken(requestToken, pin);
+					} else {
+						accessToken = twitter.getOAuthAccessToken();
+					}
+				} catch (IOException e) {
+					throw new RuntimeException("Unable to parse PIN input.", e);
+				} finally {
+					try { br.close(); } catch (Exception ex) {}
 				}
-
 				this.accessToken = accessToken.getToken();
 				this.accessTokenSecret = accessToken.getTokenSecret();
-			} catch (TwitterException te) {
-				if (401 == te.getStatusCode()) {
-					System.out.println("Unable to get the access token.");
-				} else {
-					te.printStackTrace();
-				}
 			}
-		}
-	}
-
-	public String getAccessToken() {
-		return accessToken;
-	}
-
-	public void setAccessToken(String accessToken) {
-		this.accessToken = accessToken;
-	}
-
-	public String getAccessTokenSecret() {
-		return accessTokenSecret;
-	}
-
-	public void setAccessTokenSecret(String accessTokenSecret) {
-		this.accessTokenSecret = accessTokenSecret;
-	}
-
-	public String getConsumerKey() {
-		return consumerKey;
-	}
-
-	public String getConsumerSecret() {
-		return consumerSecret;
-	}
-
-	public int getMaxEntries() {
-		return maxEntries;
-	}
-
-	public void setMaxEntries(int maxEntries) {
-		this.maxEntries = maxEntries;
-	}
-
-	protected class DemoTwitterListener implements StatusListener {
-		private final TwitterStream twitterStream;
-		private int count = 0;
+		} catch (TwitterException e) {
+			throw new RuntimeException("Fatal error with twitter stream.", e);
+		} 
 		
-		public DemoTwitterListener(TwitterStream twitterStream) {
-			this.twitterStream = twitterStream;
-		}
-
-		public void onStatus(Status status) {
-			count++;
-			if (maxEntries > 0 && count > maxEntries) {
-				twitterStream.shutdown();
-				clear();
-				return;
-			}
-			getCache().put(status.getId(), status);
-		}
-
-		public void onDeletionNotice(StatusDeletionNotice statusDeletionNotice) {
-		}
-
-		public void onTrackLimitationNotice(int numberOfLimitedStatuses) {
-		}
-
-		public void onException(Exception ex) {
-			ex.printStackTrace();
-		}
-
-		public void onScrubGeo(long lat, long lng) {
-		}
 	}
-	
-	public void startAsync() {
-
+		
+	public void run() {
 		ConfigurationBuilder cb = new ConfigurationBuilder();
 
 		if (accessTokenSecret == null || accessToken == null) {
@@ -211,9 +124,31 @@ public class TwitterDemoClient extends DelayableDemoClient<Long, Status> {
 				.setOAuthAccessToken(accessToken)
 				.setOAuthAccessTokenSecret(accessTokenSecret);
 
-		TwitterStream twitterStream = new TwitterStreamFactory(cb.build())
+		final TwitterStream stream = new TwitterStreamFactory(cb.build())
 				.getInstance();
-		twitterStream.addListener(new DemoTwitterListener(twitterStream));
-		twitterStream.sample();
+		
+		stream.addListener(new  StatusListener() {
+			
+			public void onStatus(Status status) {
+				getCache().put(status.getId(), status);
+			}
+
+			public void onDeletionNotice(StatusDeletionNotice statusDeletionNotice) { }
+
+			public void onTrackLimitationNotice(int numberOfLimitedStatuses) {	}
+
+			public void onException(Exception ex) { ex.printStackTrace(); }
+
+			public void onScrubGeo(long lat, long lng) { }
+		});
+				
+
+		Runtime.getRuntime().addShutdownHook(new Thread() {
+			public void run() {
+				stream.shutdown();
+			}
+		});
+
+		stream.sample();
 	}
 }
